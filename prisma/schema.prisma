@@ -1,0 +1,102 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String        @id @default(cuid())
+  whatsappId   String?       @unique
+  email        String?       @unique
+  password     String?
+  fullName     String?
+  role         UserRole      @default(USER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  quotes       Quote[]
+  documents    Document[]
+  conversation Conversation?
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  history   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Quote {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  
+  // NEW: Link the quote to a specific insurance product
+  insuranceProductId String
+  insuranceProduct  InsuranceProduct @relation(fields: [insuranceProductId], references: [id])
+
+  type              String   // "motor", "travel", "health"
+  status            String   @default("draft")
+  premium           Float
+  details           Json     
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Document {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  storageUrl    String
+  type          String
+  extractedText String?
+  createdAt     DateTime @default(now())
+}
+
+// ===================================================================
+// --- NEW MODEL FOR DYNAMIC BUSINESS LOGIC ---
+// ===================================================================
+model InsuranceProduct {
+  id           String @id @default(cuid())
+  type         String @unique // "motor", "travel", "health"
+  name         String // e.g., "Comprehensive Motor Insurance"
+  isActive     Boolean @default(true) // Allows us to enable/disable products
+
+  // A JSON field defining the questions the agent MUST ask.
+  // Example:
+  // [
+  //   { "key": "driverAge", "question": "What is the driver's age?", "type": "number", "required": true },
+  //   { "key": "carMake", "question": "What is the make of the car (e.g., Toyota)?", "type": "string", "required": true }
+  // ]
+  requiredInputs Json
+
+  // A JSON field defining the calculation logic for the premium.
+  // Our service will become a "rules engine" that executes this logic.
+  // Example:
+  // {
+  //   "baseRate": 50000,
+  //   "factors": [
+  //     { "key": "driverAge", "condition": "lt", "value": 25, "modifier": 1.5, "type": "multiply" },
+  //     { "key": "noClaimsBonus", "condition": "eq", "value": true, "modifier": 0.9, "type": "multiply" }
+  //   ]
+  // }
+  pricingRules Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A product can be associated with many quotes
+  quotes    Quote[]
+}
